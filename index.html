@@ -243,9 +243,36 @@
     }
 
     .breakdown-row span:last-child { color: #94a3b8; }
+
+    /* Falling GIFs */
+    #gif-rain {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 0;
+    }
+
+    .falling-gif {
+      position: absolute;
+      top: -160px;
+      width: 130px;
+      height: 130px;
+      object-fit: contain;
+      opacity: 0.55;
+      animation: fall linear forwards;
+    }
+
+    @keyframes fall {
+      0%   { transform: translateY(0) rotate(0deg); }
+      100% { transform: translateY(110vh) rotate(360deg); }
+    }
+
+    .container { position: relative; z-index: 1; }
   </style>
 </head>
 <body>
+  <div id="gif-rain"></div>
   <div class="container">
     <header>
       <h1>Physics Grade Calculator</h1>
@@ -434,6 +461,81 @@
     document.querySelectorAll('input').forEach(el => {
       el.addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); });
     });
+
+    // Falling GIFs
+    const GIF_IDS = [
+      'fYLrVmLXG9tVL4Aykg', // cat crying meme
+      'Qdln98keGghKXmVvMC', // cry rage yell
+      '80KkI75XwbEE1wRdMA', // cry screaming
+      'gzHQCsyAYRxjzHT493', // screaming into sky
+      'Mw7UXyH9zR7Ms',       // sad Will Ferrell
+      'Qc5vv7hw1moPC',       // sad Leonardo DiCaprio
+      '4Rva6oTJpqQGA',       // ugly cry
+      'l4FGnGenUW9VuLgWI',   // Jimmy Fallon ugly cry
+      'SqmkZ5IdwzTP2',       // Despicable Me minion shock
+      'P8gqZQp6fG111SJmEn',  // Kung Fu Panda shock
+      'H5C8CevNMbpBqNqFjl',  // Pedro monkey puppet
+      '2GVVvT5ATZtUQ',       // shocked Bart Simpson
+      'LyJ6KPlrFdKnK',       // Steve Harvey reaction
+      'meJN6qdG74lUKAJTQl',  // shocked dog
+      'd1ytb3wOL6PiF1iSan',  // angry cry baby
+      '26ufdipQqU2lhNA4g',   // mind blown explosion
+      '75ZaxapnyMp2w',       // Tim & Eric mind blown
+      'OK27wINdQS5YQ',       // Kramer mind blown
+      '5aLrlDiJPMPFS',       // Jon Stewart mind blown
+      'xU9TT471DTGJq',       // screaming Homer Simpson
+      '9sSrddsom3yb6',       // Homer Simpson screaming
+      'gPYW19uX4VIyKULedP',  // IShowSpeed raging
+      'KmTnUKop0AfFm',       // Lion King screaming
+      'HUkOv6BNWc1HO',       // panic omg
+      'R7weSSUjdPdoA',       // stressed freak out
+      'ie4fEHT4krdDO',       // Cosmo Kramer omg
+      '47nNHdEE4LGp2',       // Zayn Malik freaking out
+      '105jkT1dbQiNK8',      // freaking out
+      '3bLhqnqJjMNtC',       // excited freak out
+      // cringy you got this
+      '5kIh9jg6olLrZJtAf6',  // you can do it
+      'U4qDadHZSQnwawnkoz',  // you got this
+      '11F0d3IVhQbreE',      // Bill Murray encouraging
+      'faTOHi0omqCMU',       // you can do it cheering
+      'yoJC2K6rCzwNY2EngA',  // Rob Schneider YOU CAN DO IT
+      '12XDYvMJNcmLgQ',      // SpongeBob good luck
+      'xT4uQCnq6bDx8itLhK',  // motivational you can do it
+      'HxvPz7v9V0PDTwb7sg',  // Oprah "you got this"
+      'YW01MEr19Og265S0fN',  // "I beleaf in you" (leaf pun)
+      'l1J9PdkDJ2r8sg4ZG',   // Chippy the dog be happy
+      'anbU640TCuUaA',        // never give up sayings
+      'o0PuN9xxrBl9tzG9bD',  // believe do it
+      '1g98EoA7WX2mNmztm4',  // believe never give up grind
+      'Jl1Q9APSZVA3ATKrdM',  // Piñata Farms sport what
+      'FsWse1Shhkkje2HS7D',  // YouTube yes
+      'yTxFCdDx7R9U8hi7ld',  // keep going
+      'l2YWxte7sJB2XuE8M',   // keep going
+      'l3mZcxZKIQemTeT9S',   // keep going
+      'Py1LkJpCEtNiFo0Chr',  // motivate believe in yourself
+      'me3iX0hHqvLMVAX1gZ',  // you can
+    ];
+
+    const rain = document.getElementById('gif-rain');
+
+    function spawnGif() {
+      const img = document.createElement('img');
+      img.className = 'falling-gif';
+      img.src = `https://media.giphy.com/media/${GIF_IDS[Math.floor(Math.random() * GIF_IDS.length)]}/giphy.gif`;
+      img.style.left = Math.random() * 95 + 'vw';
+      const duration = 4 + Math.random() * 6; // 4–10s
+      img.style.animationDuration = duration + 's';
+      const size = 100 + Math.random() * 120; // 100–220px
+      img.style.width = img.style.height = size + 'px';
+      rain.appendChild(img);
+      img.addEventListener('animationend', () => img.remove());
+    }
+
+    // Stagger initial spawns then keep a steady stream
+    for (let i = 0; i < 12; i++) {
+      setTimeout(spawnGif, i * 300);
+    }
+    setInterval(spawnGif, 500);
   </script>
 </body>
 </html>
