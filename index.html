@@ -249,7 +249,7 @@
   <div class="container">
     <header>
       <h1>Physics Grade Calculator</h1>
-      <p>Enter your scores (0–100) to see your final grade</p>
+      <p>Enter scores as a percentage (85), decimal (0.85), or fraction (16/30)</p>
     </header>
 
     <div class="card">
@@ -327,25 +327,29 @@
       return           { letter: 'F',  css: 'grade-F',  desc: 'Not passing.' };
     }
 
+    // Returns { pct, display } or null if empty/invalid
     function getVal(id) {
       const raw = document.getElementById(id).value.trim();
       if (!raw) return null;
-      let v;
+      let pct;
       if (raw.includes('/')) {
-        const [num, den] = raw.split('/').map(Number);
-        if (!den || isNaN(num) || isNaN(den)) return null;
-        v = (num / den) * 100;
+        const parts = raw.split('/');
+        const num = parseFloat(parts[0]);
+        const den = parseFloat(parts[1]);
+        if (isNaN(num) || isNaN(den) || den === 0) return null;
+        pct = (num / den) * 100;
       } else {
-        v = parseFloat(raw);
+        const n = parseFloat(raw);
+        if (isNaN(n)) return null;
+        // If strictly between 0 and 1 (exclusive), treat as decimal (e.g. 0.85 → 85%)
+        pct = (n > 0 && n < 1) ? n * 100 : n;
       }
-      return isNaN(v) ? null : Math.min(100, Math.max(0, v));
+      return { pct: Math.min(100, Math.max(0, pct)), display: raw };
     }
 
     function calculate() {
       const vals = { hw: getVal('hw'), e1: getVal('e1'), e2: getVal('e2'), e3: getVal('e3'), fe: getVal('fe') };
-      const missingFinal = vals.fe === null;
 
-      // Require at least one score
       const hasAny = Object.values(vals).some(v => v !== null);
       if (!hasAny) {
         alert('Please enter at least one score.');
@@ -362,47 +366,43 @@
 
       resultEl.classList.add('visible');
 
-      if (missingFinal) {
-        // Show "what do I need" mode
-        letterEl.className = 'grade-letter grade-B';
-        letterEl.textContent = '?';
-        pctEl.textContent = 'Final Exam not entered';
-        labelEl.textContent = 'See below to find out what you need on the final.';
-        breakdownEl.classList.remove('visible');
+      // Always calculate grade from whatever is filled in
+      let total = 0;
+      let weightUsed = 0;
+      let rows = '';
+
+      for (const [id, weight] of Object.entries(WEIGHTS)) {
+        const entry = vals[id];
+        if (entry !== null) {
+          const contrib = entry.pct * weight;
+          total += contrib;
+          weightUsed += weight;
+          rows += `<div class="breakdown-row"><span>${LABELS[id]}</span><span>${entry.display} (${entry.pct.toFixed(1)}%) × ${(weight*100).toFixed(0)}% = ${contrib.toFixed(2)}</span></div>`;
+        }
+      }
+
+      // Scale to the weight actually entered
+      const scaled = total / weightUsed;
+      const g = getLetterGrade(scaled);
+
+      letterEl.className = `grade-letter ${g.css}`;
+      letterEl.textContent = g.letter;
+      pctEl.textContent = scaled.toFixed(2) + '%';
+
+      const weightPct = Math.round(weightUsed * 100);
+      labelEl.textContent = weightPct < 100
+        ? `Based on ${weightPct}% of your grade — ${g.desc}`
+        : g.desc;
+
+      bRowsEl.innerHTML = rows;
+      breakdownEl.classList.add('visible');
+
+      // Show "what do I need on final" if final is not entered
+      if (vals.fe === null) {
         needSec.classList.add('visible');
         calcNeeded();
       } else {
         needSec.classList.remove('visible');
-
-        // Calculate weighted total
-        let total = 0;
-        let weightUsed = 0;
-        let rows = '';
-
-        for (const [id, weight] of Object.entries(WEIGHTS)) {
-          const v = vals[id];
-          if (v !== null) {
-            const contrib = v * weight;
-            total += contrib;
-            weightUsed += weight;
-            rows += `<div class="breakdown-row"><span>${LABELS[id]}</span><span>${v.toFixed(1)} × ${(weight*100).toFixed(0)}% = ${contrib.toFixed(2)}</span></div>`;
-          }
-        }
-
-        // If some scores missing (not final), scale to what's entered
-        const scaled = weightUsed < 1 ? (total / weightUsed) : total;
-        const g = getLetterGrade(scaled);
-
-        letterEl.className = `grade-letter ${g.css}`;
-        letterEl.textContent = g.letter;
-        pctEl.textContent = scaled.toFixed(2) + '%';
-        const outOf = weightUsed < 1
-          ? `Based on ${(weightUsed * 100).toFixed(0)}% of your grade — ${g.desc}`
-          : g.desc;
-        labelEl.textContent = outOf;
-
-        bRowsEl.innerHTML = rows;
-        breakdownEl.classList.add('visible');
       }
     }
 
@@ -415,7 +415,7 @@
       let known = 0;
       for (const [id, weight] of Object.entries(WEIGHTS)) {
         if (id === 'fe') continue;
-        if (vals[id] !== null) known += vals[id] * weight;
+        if (vals[id] !== null) known += vals[id].pct * weight;
       }
 
       // target = known + fe * 0.30  =>  fe = (target - known) / 0.30
