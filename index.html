@@ -374,6 +374,19 @@
       return { pct: Math.min(100, Math.max(0, pct)), display: raw };
     }
 
+    // Returns the id of the lowest-scoring entered exam (hw/e1/e2/e3), or null if none entered.
+    function findLowestId(vals) {
+      let lowestId = null;
+      let lowestPct = Infinity;
+      for (const id of ['e1', 'e2', 'e3']) {
+        if (vals[id] !== null && vals[id].pct < lowestPct) {
+          lowestPct = vals[id].pct;
+          lowestId = id;
+        }
+      }
+      return lowestId;
+    }
+
     function calculate() {
       const vals = { hw: getVal('hw'), e1: getVal('e1'), e2: getVal('e2'), e3: getVal('e3'), fe: getVal('fe') };
 
@@ -383,28 +396,52 @@
         return;
       }
 
-      const resultEl   = document.getElementById('result');
-      const letterEl   = document.getElementById('grade-letter');
-      const pctEl      = document.getElementById('grade-pct');
-      const labelEl    = document.getElementById('grade-label');
+      const resultEl    = document.getElementById('result');
+      const letterEl    = document.getElementById('grade-letter');
+      const pctEl       = document.getElementById('grade-pct');
+      const labelEl     = document.getElementById('grade-label');
       const breakdownEl = document.getElementById('breakdown');
-      const bRowsEl    = document.getElementById('breakdown-rows');
-      const needSec    = document.getElementById('need-section');
+      const bRowsEl     = document.getElementById('breakdown-rows');
+      const needSec     = document.getElementById('need-section');
 
       resultEl.classList.add('visible');
 
-      // Always calculate grade from whatever is filled in
+      // If the final is entered and beats the lowest score, replace that score's value with the final's.
+      // The replaced category keeps its original weight; the final still counts at its own 30% weight too.
+      let replacedId = null;
+      const workingVals = Object.assign({}, vals);
+
+      if (vals.fe !== null) {
+        const lowestId = findLowestId(vals);
+        if (lowestId !== null && vals.fe.pct > vals[lowestId].pct) {
+          replacedId = lowestId;
+          workingVals[lowestId] = {
+            pct: vals.fe.pct,
+            display: vals.fe.display,
+            originalPct: vals[lowestId].pct,
+            originalDisplay: vals[lowestId].display,
+          };
+        }
+      }
+
       let total = 0;
       let weightUsed = 0;
       let rows = '';
 
       for (const [id, weight] of Object.entries(WEIGHTS)) {
-        const entry = vals[id];
+        const entry = workingVals[id];
         if (entry !== null) {
           const contrib = entry.pct * weight;
           total += contrib;
           weightUsed += weight;
-          rows += `<div class="breakdown-row"><span>${LABELS[id]}</span><span>${entry.display} (${entry.pct.toFixed(1)}%) × ${(weight*100).toFixed(0)}% = ${contrib.toFixed(2)}</span></div>`;
+          if (id === replacedId) {
+            rows += `<div class="breakdown-row">
+              <span>${LABELS[id]} <span style="color:#a5b4fc">[replaced by final]</span></span>
+              <span>${entry.display} (${entry.pct.toFixed(1)}%) × ${(weight*100).toFixed(0)}% = ${contrib.toFixed(2)} <span style="color:#64748b">was ${entry.originalDisplay} (${entry.originalPct.toFixed(1)}%)</span></span>
+            </div>`;
+          } else {
+            rows += `<div class="breakdown-row"><span>${LABELS[id]}</span><span>${entry.display} (${entry.pct.toFixed(1)}%) × ${(weight*100).toFixed(0)}% = ${contrib.toFixed(2)}</span></div>`;
+          }
         }
       }
 
@@ -417,9 +454,11 @@
       pctEl.textContent = scaled.toFixed(2) + '%';
 
       const weightPct = Math.round(weightUsed * 100);
-      labelEl.textContent = weightPct < 100
+      let desc = weightPct < 100
         ? `Based on ${weightPct}% of your grade — ${g.desc}`
         : g.desc;
+      if (replacedId) desc += ` · Final replaced ${LABELS[replacedId]}.`;
+      labelEl.textContent = desc;
 
       bRowsEl.innerHTML = rows;
       breakdownEl.classList.add('visible');
@@ -438,22 +477,45 @@
       const target = parseFloat(document.getElementById('target-grade').value);
       const resultEl = document.getElementById('need-result');
 
-      // Sum up known weighted scores
+      // Sum known weighted scores and find the lowest entered score
       let known = 0;
       for (const [id, weight] of Object.entries(WEIGHTS)) {
         if (id === 'fe') continue;
         if (vals[id] !== null) known += vals[id].pct * weight;
       }
 
-      // target = known + fe * 0.30  =>  fe = (target - known) / 0.30
-      const needed = (target - known) / 0.30;
+      const lowestId = findLowestId(vals);
+      const lowestPct    = lowestId !== null ? vals[lowestId].pct    : null;
+      const lowestWeight = lowestId !== null ? WEIGHTS[lowestId]     : 0;
+      const knownWithoutLowest = lowestId !== null ? known - lowestPct * lowestWeight : known;
+
+      // Case A: final beats the lowest score → it fills both final weight AND lowest weight
+      //   target = knownWithoutLowest + final * (lowestWeight + 0.30)
+      //   → final = (target - knownWithoutLowest) / (lowestWeight + 0.30)
+      //   Valid only when this value > lowestPct (replacement actually triggers)
+      const neededA = lowestId !== null
+        ? (target - knownWithoutLowest) / (lowestWeight + 0.30)
+        : null;
+
+      // Case B: final does NOT beat the lowest score → normal 30% weight
+      //   target = known + final * 0.30
+      const neededB = (target - known) / 0.30;
+
+      // Pick whichever case is self-consistent; replacement scenario is more favorable so check first
+      let needed, replacementNote = '';
+      if (neededA !== null && neededA > lowestPct) {
+        needed = neededA;
+        replacementNote = ` <span style="color:#64748b">(would replace your ${LABELS[lowestId]} score of ${lowestPct.toFixed(1)}%)</span>`;
+      } else {
+        needed = neededB;
+      }
 
       if (needed <= 0) {
         resultEl.innerHTML = `You already have the grade you want — no matter what you score on the final!`;
       } else if (needed > 100) {
         resultEl.innerHTML = `You would need <strong>${needed.toFixed(1)}%</strong> on the final, which is not achievable. Consider aiming for a lower target grade.`;
       } else {
-        resultEl.innerHTML = `You need at least <strong>${needed.toFixed(1)}%</strong> on the final exam.`;
+        resultEl.innerHTML = `You need at least <strong>${needed.toFixed(1)}%</strong> on the final exam.${replacementNote}`;
       }
     }
 
