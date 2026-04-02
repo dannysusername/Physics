@@ -477,29 +477,33 @@
       const target = parseFloat(document.getElementById('target-grade').value);
       const resultEl = document.getElementById('need-result');
 
-      // Sum known weighted scores and find the lowest entered score
+      // Sum known weighted scores and total weight of entered non-final items
       let known = 0;
+      let knownWeight = 0;
       for (const [id, weight] of Object.entries(WEIGHTS)) {
         if (id === 'fe') continue;
-        if (vals[id] !== null) known += vals[id].pct * weight;
+        if (vals[id] !== null) {
+          known += vals[id].pct * weight;
+          knownWeight += weight;
+        }
       }
+
+      // calculate() scales by weightUsed, so to hit `target` as a scaled percentage:
+      //   (total) / (knownWeight + 0.30) = target  →  total = target * (knownWeight + 0.30)
+      const scaledTarget = target * (knownWeight + 0.30);
 
       const lowestId = findLowestId(vals);
       const lowestPct    = lowestId !== null ? vals[lowestId].pct    : null;
       const lowestWeight = lowestId !== null ? WEIGHTS[lowestId]     : 0;
       const knownWithoutLowest = lowestId !== null ? known - lowestPct * lowestWeight : known;
 
-      // Case A: final beats the lowest score → it fills both final weight AND lowest weight
-      //   target = knownWithoutLowest + final * (lowestWeight + 0.30)
-      //   → final = (target - knownWithoutLowest) / (lowestWeight + 0.30)
-      //   Valid only when this value > lowestPct (replacement actually triggers)
+      // Case A: final beats the lowest exam → covers both final weight AND lowest exam weight
       const neededA = lowestId !== null
-        ? (target - knownWithoutLowest) / (lowestWeight + 0.30)
+        ? (scaledTarget - knownWithoutLowest) / (lowestWeight + 0.30)
         : null;
 
-      // Case B: final does NOT beat the lowest score → normal 30% weight
-      //   target = known + final * 0.30
-      const neededB = (target - known) / 0.30;
+      // Case B: final does NOT beat the lowest exam → normal 30% weight only
+      const neededB = (scaledTarget - known) / 0.30;
 
       // Pick whichever case is self-consistent; replacement scenario is more favorable so check first
       let needed, replacementNote = '';
